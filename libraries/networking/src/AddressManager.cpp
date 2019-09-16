@@ -379,24 +379,47 @@ bool isPossiblePlaceName(QString possiblePlaceName) {
 }
 
 void AddressManager::handleLookupString(const QString& lookupString, bool fromSuggestions) {
+
+    quint16 domainPort = 40102; 
+    QString pathString = ""; 
+
     if (!lookupString.isEmpty()) {
         // make this a valid hifi URL and handle it off to handleUrl
         QString sanitizedString = lookupString.trimmed();
         QUrl lookupURL;
 
         if (!lookupString.startsWith('/')) {
-            // sometimes we need to handle lookupStrings like hifi:/somewhere
-            const QRegExp HIFI_SCHEME_REGEX = QRegExp(URL_SCHEME_HIFI + ":\\/{1,2}", Qt::CaseInsensitive);
-            sanitizedString = sanitizedString.remove(HIFI_SCHEME_REGEX);
 
-            lookupURL = QUrl(sanitizedString);
-            if (lookupURL.scheme().isEmpty() || lookupURL.scheme().toLower() == LOCALHOST) {
-                lookupURL = QUrl("hifi://" + sanitizedString);
+            const QRegExp HIFI_SCHEME_REGEX = QRegExp(URL_SCHEME_HIFI + ":\\/{1,2}", Qt::CaseInsensitive); // strip existing hifi:// prefixes if given.
+            sanitizedString = sanitizedString.remove(HIFI_SCHEME_REGEX);
+ 
+            // \ becomes \\ because its a regex string
+            const QString HOSTNAME_HOST_REGEX_STR = "([0-9A-Z\\.\\-]+)";  // isolates the hostname
+            const QString HOSTNAME_PORT_REGEX_STR = "(?::([0-9]{1,5}))?"; // isolates port # if given
+            const QString HOSTNAME_POSROT_REGEX_STR = "((?:\\/[0-9]+,[0-9]+,[0-9]+)?(?:\\/[0-9]+,[0-9]+,[0-9]+,[0-9]+)?)"; // isolates posrot path if given
+
+            const QString HOSTNAME_REGEX_STR = "^" + HOSTNAME_HOST_REGEX_STR + HOSTNAME_PORT_REGEX_STR + HOSTNAME_POSROT_REGEX_STR;
+
+            QRegExp hostNameAddressRegex(HOSTNAME_REGEX_STR, Qt::CaseInsensitive);
+            int pos = hostNameAddressRegex.indexIn(sanitizedString);
+
+            if (pos != -1) {  
+                pathString = hostNameAddressRegex.cap(3);
+                sanitizedString = hostNameAddressRegex.cap(1) + pathString; 
+                domainPort = hostNameAddressRegex.cap(2).toInt();
             }
+            
+            lookupURL = QUrl(sanitizedString);
+
+            if (lookupURL.scheme().isEmpty() || lookupURL.scheme().toLower() == LOCALHOST) {
+                lookupURL = QUrl("hifi://" + sanitizedString); 
+            }
+
         } else {
             lookupURL = QUrl(sanitizedString);
         }
 
+        lookupURL.setPort(domainPort); // add the port to the qurl
         handleUrl(lookupURL, fromSuggestions ? Suggestions : UserInput);
     }
 }
